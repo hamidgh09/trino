@@ -781,7 +781,7 @@
             <dependency>
                 <groupId>io.hops.hadoop</groupId>
                 <artifactId>hadoop-apache</artifactId>
-                <version>3.4.3.0-EE-RC0</version>
+                <version>3.4.3.0-EE-RC1</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.lz4</groupId>
@@ -793,7 +793,7 @@
             <dependency>
                 <groupId>io.hops.hive</groupId>
                 <artifactId>hive-apache</artifactId>
-                <version>3.0.0.14.0</version>
+                <version>3.0.0.14.1</version>
                 <exclusions>
                     <exclusion>
                         <groupId>javax.annotation</groupId>
