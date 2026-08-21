@@ -76,7 +76,7 @@ node("local") {
           # cp -R core/docker/default \"${env.WORK_DIR}/\"
         """
         version = readFile "version"
-        withEnv(["TAG_VERSION=${version.trim()}", "JDK_RELEASE=${env.JDK_RELEASE}", "JDK_DOWNLOAD_LINK=${env.JDK_DOWNLOAD_LINK}", "ARCH=${env.ARCH}"]) {
+        withEnv(["TAG_VERSION=${env.TRINO_VERSION}.${version.trim()}", "JDK_RELEASE=${env.JDK_RELEASE}", "JDK_DOWNLOAD_LINK=${env.JDK_DOWNLOAD_LINK}", "ARCH=${env.ARCH}"]) {
           def builder = new ImageBuilder(this)
           def m = readFile "${env.WORKSPACE}/build-manifest.json"
           builder.run(m)
