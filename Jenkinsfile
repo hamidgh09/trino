@@ -22,6 +22,15 @@ node("local") {
         // start every build from a clean local Maven repo
         sh "rm -rf \"${env.MAVEN_LOCAL_REPO}\""
 
+        // Same reasoning for the frontend. The workspace is reused between builds and
+        // `mvn clean` only removes target/, so node_modules under src/main/resources/
+        // survives. That matters because 483 renamed the web UI directories: on the 480
+        // line webapp/ held the old React 16 app, on 483 it holds the React 19 one. A
+        // workspace that built 480 leaves React 16 where the 483 build resolves react
+        // from, and the bundle ends up with two React copies and dies at first render.
+        sh "rm -rf core/trino-web-ui/src/main/resources/webapp/node_modules"
+        sh "rm -rf core/trino-web-ui/src/main/resources/webapp-legacy/src/node_modules"
+
         env.TRINO_VERSION = sh(script: "./mvnw -f pom.xml --quiet -Dmaven.repo.local=\"${env.MAVEN_LOCAL_REPO}\" help:evaluate -Dexpression=project.version -DforceStdout", returnStdout: true).trim()
 
         // JDK version is now defined as <temurin.release> in pom.xml
@@ -45,7 +54,29 @@ node("local") {
         sh "tar -xzf jdk24.tar.gz -C ${env.WORKSPACE}/jdk --strip-components=1"
         sh "rm jdk24.tar.gz"
 
-        sh "JAVA_HOME=${env.WORKSPACE}/jdk ${env.WORKSPACE}/mvnw clean package -DskipTests -Dmaven.repo.local=\"${env.MAVEN_LOCAL_REPO}\""
+        // -Pci switches the frontend goal to package:clean, i.e. `bun install --frozen-lockfile`,
+        // so bun.lock's react/react-dom pinning is honoured. The profile otherwise activates on a
+        // CI environment variable, which GitHub Actions sets and this node does not, so upstream
+        // release builds got the frozen install and ours silently did not.
+        sh "JAVA_HOME=${env.WORKSPACE}/jdk ${env.WORKSPACE}/mvnw clean package -DskipTests -Pci -Dmaven.repo.local=\"${env.MAVEN_LOCAL_REPO}\""
+
+        // Fail the build rather than publish a web UI that cannot render. Two independent
+        // signals, both calibrated against upstream's own 483 artifact, which gives 0 and 1:
+        // no React <=18 internals in the bundle, and every JSX call site on one runtime.
+        sh """#!/usr/bin/env bash
+          set -euo pipefail
+          BUNDLE=\$(ls core/trino-web-ui/target/classes/webapp/dist/assets/index-*.js)
+          if grep -q 'ReactCurrentOwner' "\$BUNDLE"; then
+            echo "web UI bundle carries a pre-19 React runtime: \$BUNDLE" >&2
+            exit 1
+          fi
+          RUNTIMES=\$(grep -oE '\\(0,[A-Za-z_\$][A-Za-z0-9_\$]*\\.jsxs?\\)' "\$BUNDLE" \\
+            | sed -E 's/^\\(0,([^.]+)\\..*/\\1/' | sort -u | wc -l)
+          if [ "\$RUNTIMES" -ne 1 ]; then
+            echo "web UI bundle has \$RUNTIMES JSX runtimes, expected 1: \$BUNDLE" >&2
+            exit 1
+          fi
+        """
 
         // Archive artifacts
         archiveArtifacts artifacts: "core/${env.SERVER_ARTIFACT}/target/${env.SERVER_ARTIFACT}-${env.TRINO_VERSION}.tar.gz", fingerprint: true, allowEmptyArchive: true
