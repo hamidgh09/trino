@@ -23,13 +23,21 @@ node("local") {
         sh "rm -rf \"${env.MAVEN_LOCAL_REPO}\""
 
         // Same reasoning for the frontend. The workspace is reused between builds and
-        // `mvn clean` only removes target/, so node_modules under src/main/resources/
-        // survives. That matters because 483 renamed the web UI directories: on the 480
-        // line webapp/ held the old React 16 app, on 483 it holds the React 19 one. A
-        // workspace that built 480 leaves React 16 where the 483 build resolves react
-        // from, and the bundle ends up with two React copies and dies at first render.
-        sh "rm -rf core/trino-web-ui/src/main/resources/webapp/node_modules"
-        sh "rm -rf core/trino-web-ui/src/main/resources/webapp-legacy/src/node_modules"
+        // `mvn clean` only removes target/, so every node_modules and dist/ under
+        // src/main/resources/ survives. That matters because 483 renamed the web UI
+        // directories: on the 480 line webapp/src/ held the old React 16 app, while on 483
+        // webapp/ is the React 19 app and webapp/src/ is its source tree. A workspace that
+        // built 480 therefore leaves React 16 *inside* the new app's sources, where Node
+        // resolution finds it before the app's own node_modules, and the bundle ends up with
+        // two React copies and dies at first render.
+        //
+        // Cleaned by module path rather than by listing directories. Listing is what let this
+        // through the first time: the stale tree belongs to the previous release's layout, so
+        // no list derived from the layout being built can name it. -x is required because
+        // node_modules is gitignored; tracked files are never touched. Scoped to the module
+        // that owns every package.json in the repo, so it leaves the workspace's .m2, the
+        // downloaded JDK, and anything else at the root alone.
+        sh "git clean -xfd core/trino-web-ui"
 
         env.TRINO_VERSION = sh(script: "./mvnw -f pom.xml --quiet -Dmaven.repo.local=\"${env.MAVEN_LOCAL_REPO}\" help:evaluate -Dexpression=project.version -DforceStdout", returnStdout: true).trim()
 
