@@ -1,0 +1,10 @@
+{
+  "tables": [
+    {
+      "group": "(.*)__shared_featurestore",
+      "catalog": "hive|iceberg|delta|hudi",
+      "schema": "$1_featurestore",
+      "privileges": ["SELECT"]
+    }
+  ]
+}

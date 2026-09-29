@@ -1,0 +1,12 @@
+{
+  "schemas": [],
+  "tables": [
+    {
+      "group": "(.*)__shared_featurestore",
+      "schema": "$1_featurestore",
+      "privileges": [
+        "SELECT"
+      ]
+    }
+  ]
+}

@@ -58,8 +58,7 @@ public class CatalogTableAccessControlRule
 
     public boolean matches(String user, Set<String> roles, Set<String> groups, CatalogSchemaTableName table)
     {
-        // Substitute capturing groups from the user/role/group match (e.g. $1) into the catalog regex,
-        // consistent with how the schema/table regexes are handled in TableAccessControlRule.matches().
+        // Catalog, schema and table in one call, so a single matching group supplies $1 for all three
         ReplacePatternMatcher replacePatternMatcher = new ReplacePatternMatcher(
                 tableAccessControlRule.getUserRegex(),
                 tableAccessControlRule.getRoleRegex(),
@@ -67,10 +66,13 @@ public class CatalogTableAccessControlRule
                 user,
                 roles,
                 groups);
-        if (!replacePatternMatcher.matchCatalog(catalogRegex, table.getCatalogName())) {
-            return false;
-        }
-        return tableAccessControlRule.matches(user, roles, groups, table.getSchemaTableName());
+        return replacePatternMatcher.matchCatalogSchemaAndTable(
+                catalogRegex,
+                table.getCatalogName(),
+                tableAccessControlRule.getSchemaRegex(),
+                table.getSchemaTableName().getSchemaName(),
+                tableAccessControlRule.getTableRegex(),
+                table.getSchemaTableName().getTableName());
     }
 
     public Set<TablePrivilege> getPrivileges()
