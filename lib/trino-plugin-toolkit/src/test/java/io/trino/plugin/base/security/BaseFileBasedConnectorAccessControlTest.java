@@ -855,6 +855,25 @@ public abstract class BaseFileBasedConnectorAccessControlTest
         accessControl.checkCanShowTables(ALICE, "alice-schema");
     }
 
+    @Test
+    public void testSeveralSharedFeatureStores()
+            throws Exception
+    {
+        ConnectorAccessControl accessControl = createAccessControl("table-shared-featurestore.json");
+        ConnectorSecurityContext member = user("q__ann", ImmutableSet.of("a__shared_featurestore", "b__shared_featurestore", "c__shared_featurestore"));
+
+        for (String schema : ImmutableList.of("a_featurestore", "b_featurestore", "c_featurestore")) {
+            accessControl.checkCanSelectFromColumns(member, new SchemaTableName(schema, "fg_1"), Optional.empty(), ImmutableSet.of());
+            assertDenied(() -> accessControl.checkCanInsertIntoTable(member, new SchemaTableName(schema, "fg_1"), Optional.empty()));
+        }
+        assertDenied(() -> accessControl.checkCanSelectFromColumns(member, new SchemaTableName("d_featurestore", "fg_1"), Optional.empty(), ImmutableSet.of()));
+        assertThat(accessControl.filterTables(member, ImmutableSet.of(
+                new SchemaTableName("a_featurestore", "fg_1"),
+                new SchemaTableName("c_featurestore", "fg_1"),
+                new SchemaTableName("d_featurestore", "fg_1"))))
+                .containsExactlyInAnyOrder(new SchemaTableName("a_featurestore", "fg_1"), new SchemaTableName("c_featurestore", "fg_1"));
+    }
+
     protected ConnectorAccessControl createAccessControl(Map<String, String> configProperties)
     {
         Bootstrap bootstrap = new Bootstrap(binder -> binder.bind(CatalogName.class).toInstance(new CatalogName("test_catalog")), new FileBasedAccessControlModule());

@@ -1,0 +1,21 @@
+{
+  "schemas": [
+    {
+      "group": "(.*)__data_owner",
+      "schema": "($1|$1_featurestore)",
+      "owner": true
+    }
+  ],
+  "tables": [
+    {
+      "group": "(.*)__data_owner",
+      "schema": "($1|$1_featurestore)",
+      "privileges": ["SELECT", "INSERT", "DELETE", "UPDATE", "OWNERSHIP"]
+    },
+    {
+      "group": "(.*)__shared_featurestore",
+      "schema": "$1_featurestore",
+      "privileges": ["SELECT"]
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "queries": [
+    {
+      "group": "admin",
+      "allow": ["execute", "kill", "view"]
+    }
+  ]
+}

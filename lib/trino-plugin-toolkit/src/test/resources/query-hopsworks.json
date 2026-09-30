@@ -1,0 +1,21 @@
+{
+  "queries": [
+    {
+      "group": "admin",
+      "allow": ["execute", "kill", "view"]
+    },
+    {
+      "group": "(.*)__data_owner",
+      "queryOwner": "$1__.*",
+      "allow": ["kill", "view"]
+    },
+    {
+      "user": "(.*)__.*",
+      "queryOwner": "$1__.*",
+      "allow": ["view"]
+    },
+    {
+      "allow": ["execute"]
+    }
+  ]
+}

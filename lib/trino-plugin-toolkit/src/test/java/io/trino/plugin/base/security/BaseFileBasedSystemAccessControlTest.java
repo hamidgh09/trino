@@ -1887,6 +1887,145 @@ public abstract class BaseFileBasedSystemAccessControlTest
         assertTableRulesForCheckCanInsertIntoTable(accessControl);
     }
 
+    @Test
+    public void testSeveralSharedFeatureStores()
+            throws Exception
+    {
+        SystemAccessControl accessControl = newFileBasedSystemAccessControl("file-based-system-access-shared-featurestore.json");
+        SystemSecurityContext member = new SystemSecurityContext(Identity.forUser("q__ann")
+                .withGroups(ImmutableSet.of("q__data_owner", "a__shared_featurestore", "b__shared_featurestore", "c__shared_featurestore")).build(), queryId, queryStart);
+
+        for (String schema : ImmutableList.of("a_featurestore", "b_featurestore", "c_featurestore")) {
+            accessControl.checkCanSelectFromColumns(member, new CatalogSchemaTableName("hive", schema, "fg_1"), Optional.empty(), ImmutableSet.of());
+            assertAccessDenied(
+                    () -> accessControl.checkCanInsertIntoTable(member, new CatalogSchemaTableName("hive", schema, "fg_1"), Optional.empty()),
+                    INSERT_TABLE_ACCESS_DENIED_MESSAGE);
+        }
+        accessControl.checkCanInsertIntoTable(member, new CatalogSchemaTableName("hive", "q_featurestore", "fg_1"), Optional.empty());
+        assertAccessDenied(
+                () -> accessControl.checkCanSelectFromColumns(member, new CatalogSchemaTableName("hive", "d_featurestore", "fg_1"), Optional.empty(), ImmutableSet.of()),
+                SELECT_TABLE_ACCESS_DENIED_MESSAGE);
+
+        assertThat(accessControl.filterSchemas(member, "hive", ImmutableSet.of("q", "q_featurestore", "a_featurestore", "b_featurestore", "c_featurestore", "d_featurestore")))
+                .containsExactlyInAnyOrder("q", "q_featurestore", "a_featurestore", "b_featurestore", "c_featurestore");
+        assertThat(accessControl.filterTables(member, "hive", ImmutableSet.of(
+                new SchemaTableName("a_featurestore", "fg_1"),
+                new SchemaTableName("c_featurestore", "fg_1"),
+                new SchemaTableName("d_featurestore", "fg_1"))))
+                .containsExactlyInAnyOrder(new SchemaTableName("a_featurestore", "fg_1"), new SchemaTableName("c_featurestore", "fg_1"));
+    }
+
+    @Test
+    public void testSeveralSharedFeatureStoresInRestrictedCatalogs()
+            throws Exception
+    {
+        SystemAccessControl accessControl = newFileBasedSystemAccessControl("file-based-system-access-shared-featurestore-catalogs.json");
+        SystemSecurityContext member = new SystemSecurityContext(Identity.forUser("q__ann")
+                .withGroups(ImmutableSet.of("a__shared_featurestore", "b__shared_featurestore", "c__shared_featurestore")).build(), queryId, queryStart);
+
+        for (String schema : ImmutableList.of("a_featurestore", "b_featurestore", "c_featurestore")) {
+            accessControl.checkCanSelectFromColumns(member, new CatalogSchemaTableName("iceberg", schema, "fg_1"), Optional.empty(), ImmutableSet.of());
+        }
+        assertAccessDenied(
+                () -> accessControl.checkCanSelectFromColumns(member, new CatalogSchemaTableName("tpch", "a_featurestore", "fg_1"), Optional.empty(), ImmutableSet.of()),
+                SELECT_TABLE_ACCESS_DENIED_MESSAGE);
+        assertAccessDenied(
+                () -> accessControl.checkCanSelectFromColumns(member, new CatalogSchemaTableName("iceberg", "d_featurestore", "fg_1"), Optional.empty(), ImmutableSet.of()),
+                SELECT_TABLE_ACCESS_DENIED_MESSAGE);
+    }
+
+    @Test
+    public void testCapturingGroupsBindOneGroupAcrossFields()
+            throws Exception
+    {
+        SystemAccessControl accessControl = newFileBasedSystemAccessControl("file-based-system-access-single-binding.json");
+
+        SystemSecurityContext schemaOwner = new SystemSecurityContext(Identity.forUser("ann")
+                .withGroups(ImmutableSet.of("a__schema_owner", "b__schema_owner")).build(), queryId, queryStart);
+        accessControl.checkCanDropSchema(schemaOwner, new CatalogSchemaName("a_catalog", "a_schema"));
+        accessControl.checkCanDropSchema(schemaOwner, new CatalogSchemaName("b_catalog", "b_schema"));
+        assertAccessDenied(
+                () -> accessControl.checkCanDropSchema(schemaOwner, new CatalogSchemaName("a_catalog", "b_schema")),
+                DROP_SCHEMA_ACCESS_DENIED_MESSAGE);
+
+        SystemSecurityContext catalogReader = new SystemSecurityContext(Identity.forUser("ann")
+                .withGroups(ImmutableSet.of("a__catalog_reader", "b__catalog_reader")).build(), queryId, queryStart);
+        accessControl.checkCanSelectFromColumns(catalogReader, new CatalogSchemaTableName("a_catalog", "a_schema", "a_table"), Optional.empty(), ImmutableSet.of());
+        accessControl.checkCanSelectFromColumns(catalogReader, new CatalogSchemaTableName("b_catalog", "b_schema", "b_table"), Optional.empty(), ImmutableSet.of());
+        assertAccessDenied(
+                () -> accessControl.checkCanSelectFromColumns(catalogReader, new CatalogSchemaTableName("a_catalog", "b_schema", "b_table"), Optional.empty(), ImmutableSet.of()),
+                SELECT_TABLE_ACCESS_DENIED_MESSAGE);
+        assertAccessDenied(
+                () -> accessControl.checkCanSelectFromColumns(catalogReader, new CatalogSchemaTableName("a_catalog", "a_schema", "b_table"), Optional.empty(), ImmutableSet.of()),
+                SELECT_TABLE_ACCESS_DENIED_MESSAGE);
+        assertThat(accessControl.filterCatalogs(catalogReader, ImmutableSet.of("a_catalog", "b_catalog", "c_catalog")))
+                .containsExactlyInAnyOrder("a_catalog", "b_catalog");
+
+        SystemSecurityContext tableReader = new SystemSecurityContext(Identity.forUser("ann")
+                .withGroups(ImmutableSet.of("a__table_reader", "b__table_reader")).build(), queryId, queryStart);
+        accessControl.checkCanSelectFromColumns(tableReader, new CatalogSchemaTableName("any", "a_schema", "a_table"), Optional.empty(), ImmutableSet.of());
+        accessControl.checkCanSelectFromColumns(tableReader, new CatalogSchemaTableName("any", "b_schema", "b_table"), Optional.empty(), ImmutableSet.of());
+        assertAccessDenied(
+                () -> accessControl.checkCanSelectFromColumns(tableReader, new CatalogSchemaTableName("any", "a_schema", "b_table"), Optional.empty(), ImmutableSet.of()),
+                SELECT_TABLE_ACCESS_DENIED_MESSAGE);
+    }
+
+    @Test
+    public void testExecuteQueryChecksPrincipal()
+            throws Exception
+    {
+        SystemAccessControl accessControl = newFileBasedSystemAccessControl("query-admin-only.json");
+
+        accessControl.checkCanExecuteQuery(Identity.forUser("alberto").withGroups(ImmutableSet.of("admin")).build(), queryId);
+        assertAccessDenied(
+                () -> accessControl.checkCanExecuteQuery(Identity.forUser("q__ann").withGroups(ImmutableSet.of("q__data_owner")).build(), queryId),
+                "Cannot execute query");
+    }
+
+    @Test
+    public void testHopsworksQueryRules()
+            throws Exception
+    {
+        SystemAccessControl accessControl = newFileBasedSystemAccessControl("query-hopsworks.json");
+        Identity admin = Identity.forUser("alberto").withGroups(ImmutableSet.of("admin")).build();
+        Identity dataOwner = Identity.forUser("q__ann").withGroups(ImmutableSet.of("q__data_owner", "p__data_owner", "a__shared_featurestore")).build();
+        Identity member = Identity.forUser("q__bob").withGroups(ImmutableSet.of("q__data_scientist")).build();
+        Identity projectQueryOwner = Identity.ofUser("q__carl");
+        Identity otherProjectQueryOwner = Identity.ofUser("p__dora");
+        Identity unrelatedQueryOwner = Identity.ofUser("r__erin");
+
+        accessControl.checkCanExecuteQuery(admin, queryId);
+        accessControl.checkCanKillQueryOwnedBy(admin, unrelatedQueryOwner);
+
+        accessControl.checkCanExecuteQuery(dataOwner, queryId);
+        accessControl.checkCanKillQueryOwnedBy(dataOwner, projectQueryOwner);
+        accessControl.checkCanKillQueryOwnedBy(dataOwner, otherProjectQueryOwner);
+        assertAccessDenied(() -> accessControl.checkCanKillQueryOwnedBy(dataOwner, unrelatedQueryOwner), "Cannot kill query");
+
+        accessControl.checkCanExecuteQuery(member, queryId);
+        accessControl.checkCanViewQueryOwnedBy(member, projectQueryOwner);
+        assertAccessDenied(() -> accessControl.checkCanViewQueryOwnedBy(member, otherProjectQueryOwner), "Cannot view query");
+        assertAccessDenied(() -> accessControl.checkCanKillQueryOwnedBy(member, projectQueryOwner), "Cannot kill query");
+        assertThat(accessControl.filterViewQueryOwnedBy(member, ImmutableSet.of(projectQueryOwner, otherProjectQueryOwner, unrelatedQueryOwner)))
+                .containsExactly(projectQueryOwner);
+    }
+
+    @Test
+    public void testCatalogRulesTryEveryMatchingGroup()
+            throws Exception
+    {
+        SystemAccessControl accessControl = newFileBasedSystemAccessControl("file-based-system-access-project-catalogs.json");
+        SystemSecurityContext owner = new SystemSecurityContext(Identity.forUser("q__ann")
+                .withGroups(ImmutableSet.of("q__data_owner", "p__data_owner", "a__shared__sales", "b__shared__crm")).build(), queryId, queryStart);
+
+        assertThat(accessControl.canAccessCatalog(owner, "q__jdbc")).isTrue();
+        assertThat(accessControl.canAccessCatalog(owner, "p__jdbc")).isTrue();
+        assertThat(accessControl.canAccessCatalog(owner, "r__jdbc")).isFalse();
+        assertThat(accessControl.canAccessCatalog(owner, "a__sales")).isTrue();
+        assertThat(accessControl.canAccessCatalog(owner, "b__crm")).isTrue();
+        assertThat(accessControl.canAccessCatalog(owner, "a__crm")).isFalse();
+    }
+
     protected SystemAccessControl newFileBasedSystemAccessControl(String rulesName)
             throws URISyntaxException
     {

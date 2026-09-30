@@ -159,6 +159,11 @@ public class TableAccessControlRule
         return schemaRegex;
     }
 
+    Optional<Pattern> getTableRegex()
+    {
+        return tableRegex;
+    }
+
     public enum TablePrivilege
     {
         SELECT, INSERT, DELETE, UPDATE, OWNERSHIP, GRANT_SELECT

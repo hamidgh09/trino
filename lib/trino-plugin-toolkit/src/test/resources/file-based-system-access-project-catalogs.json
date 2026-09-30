@@ -1,0 +1,14 @@
+{
+  "catalogs": [
+    {
+      "group": "(.*)__data_owner",
+      "catalog": "$1__.*",
+      "allow": "all"
+    },
+    {
+      "group": "(.*)__shared__(.*)",
+      "catalog": "$1__$2",
+      "allow": "read-only"
+    }
+  ]
+}

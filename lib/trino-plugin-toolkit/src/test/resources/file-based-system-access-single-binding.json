@@ -1,0 +1,32 @@
+{
+  "schemas": [
+    {
+      "group": "(.*)__schema_owner",
+      "catalog": "$1_catalog",
+      "schema": "$1_schema",
+      "owner": true
+    }
+  ],
+  "tables": [
+    {
+      "group": "(.*)__catalog_reader",
+      "catalog": "$1_catalog",
+      "schema": "$1_schema",
+      "table": "$1_table",
+      "privileges": [
+        "SELECT"
+      ]
+    },
+    {
+      "group": "(.*)__table_reader",
+      "schema": "$1_schema",
+      "table": "$1_table",
+      "privileges": [
+        "SELECT"
+      ]
+    }
+  ],
+  "catalog_session_properties": [],
+  "functions": [],
+  "procedures": []
+}
