@@ -99,12 +99,16 @@ node("local") {
 
           cp -f \"core/${env.SERVER_ARTIFACT}/target/${env.SERVER_ARTIFACT}-${env.TRINO_VERSION}.tar.gz\" \"${env.WORK_DIR}/\"
           cp -f \"client/trino-cli/target/trino-cli-${env.TRINO_VERSION}-executable.jar\" \"${env.WORK_DIR}/trino-cli.jar\"
-          tar -C \"${env.WORK_DIR}\" -xzf \"${WORK_DIR}/${env.SERVER_ARTIFACT}-${env.TRINO_VERSION}.tar.gz\"
+          # -m stamps every file with the extraction time. The tarball is reproducible, so its
+          # entries all carry the same fixed mtime, and buildx syncs the build context by size and
+          # mtime rather than content: a jar whose only change is its manifest keeps its size, and
+          # the builder silently reuses the copy from the previous build of the same version.
+          tar -m -C \"${env.WORK_DIR}\" -xzf \"${WORK_DIR}/${env.SERVER_ARTIFACT}-${env.TRINO_VERSION}.tar.gz\"
           rm -f \"${env.WORK_DIR}/${env.SERVER_ARTIFACT}-${env.TRINO_VERSION}.tar.gz\"
 
           # Ensure the destination does not exist to avoid 'Directory not empty' errors
           if [ -d "${env.WORK_DIR}/trino-server" ]; then
-            echo "Removing existing `trino-server` directory"
+            echo "Removing existing trino-server directory"
             rm -rf "${env.WORK_DIR}/trino-server"
           fi
 
