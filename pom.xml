@@ -749,7 +749,7 @@
             <dependency>
                 <groupId>io.hops.hadoop</groupId>
                 <artifactId>hadoop-apache</artifactId>
-                <version>3.4.3.3-EE-RC0</version>
+                <version>3.4.3.3-EE-RC1</version>
                 <exclusions>
                     <exclusion>
                         <groupId>org.lz4</groupId>
